@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Mandala Screensaver</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;overflow:hidden}
+  canvas{display:block; width:100vw; height:100vh; touch-action:none; -webkit-tap-highlight-color:transparent;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- Fragment shaders embedded -->
+<script id="vs" type="x-shader/x-vertex">
+#version 300 es
+precision highp float;
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+</script>
+
+<script id="fs_fractal" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_center;
+uniform float u_scale;
+uniform int u_maxIter;
+uniform int u_formula;
+uniform float u_power;
+uniform vec2 u_juliaC;
+uniform float u_seed;
+uniform float u_symmetry;
+uniform int u_mirror;
+uniform sampler2D u_palette; // 1D palette texture (width N, height 1)
+uniform float u_tweak;
+
+float rand1(vec2 co){ return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453123 + u_seed*0.000001); }
+
+vec3 pal(float t){
+    // sample 1D palette texture
+    return texture(u_palette, vec2(fract(t), 0.5)).rgb;
+}
+
+vec2 cpow(vec2 z, float p){
+    float r = length(z);
+    float th = atan(z.y, z.x);
+    float rp = pow(r, p);
+    return vec2(rp * cos(th*p), rp * sin(th*p));
+}
+
+vec2 apply_sym(vec2 z, float slices, int mirror){
+    if(slices <= 1.5) return z;
+    float theta = atan(z.y, z.x);
+    float r = length(z);
+    float slice = 6.28318530718 / slices;
+    theta = mod(theta + 1e-6, slice);
+    if(mirror==1 && theta > slice*0.5) theta = slice - theta;
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
+float iterateFractal(vec2 c){
+    int maxI = u_maxIter;
+    vec2 z = vec2(0.0);
+    float mu = float(maxI);
+    if(u_formula == 3){ // julia
+        z = c;
+        for(int i=0;i<4096;i++){
+            if(i>=maxI) break;
+            if(u_power==2.0){
+                z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + u_juliaC;
+            } else {
+                z = cpow(z, u_power) + u_juliaC;
+            }
+            float r2 = dot(z,z);
+            if(r2>256.0){ float r = sqrt(r2); mu = float(i) + 1.0 - log(log(r))/log(max(u_power,2.0)); break;}
+        }
+    } else if(u_formula == 2){ // burning ship
+        z = vec2(0.0);
+        for(int i=0;i<4096;i++){
+            if(i>=maxI) break;
+            z = vec2(abs(z.x), abs(z.y));
+            vec2 z2 = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+            z = z2;
+            float r2 = dot(z,z);
+            if(r2>256.0){ float r=sqrt(r2); mu = float(i) + 1.0 - log(log(r))/log(2.0); break; }
+        }
+    } else if(u_formula == 4){ // strange
+        z = vec2(0.0);
+        for(int i=0;i<4096;i++){
+            if(i>=maxI) break;
+            vec2 znew = vec2(sin(z.x*z.x - z.y*z.y) + c.x, tan(2.0*z.x*z.y) + c.y);
+            z = znew;
+            float r2 = dot(z,z);
+            if(!isfinite(r2) || r2 > 1e5){ float r = sqrt(min(r2,1e5)); mu = float(i) + 1.0 - log(max(1e-6, log(r)))/log(2.0); break;}
+        }
+    } else { // mandelbrot / multibrot
+        z = vec2(0.0);
+        for(int i=0;i<4096;i++){
+            if(i>=maxI) break;
+            if(u_power==2.0){
+                z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+            } else {
+                z = cpow(z, u_power) + c;
+            }
+            float r2 = dot(z,z);
+            if(r2>256.0){ float r=sqrt(r2); mu = float(i) + 1.0 - log(log(r))/log(max(u_power,2.0)); break; }
+        }
+    }
+    return mu;
+}
+
+void main(){
+    // pixel coords centered with aspect preserved
+    vec2 uv = (v_uv * u_resolution - 0.5*u_resolution) / u_resolution.y;
+    vec2 z = uv * u_scale + u_center;
+
+    // symmetry
+    z = apply_sym(z, u_symmetry, u_mirror);
+
+    // jitter
+    z += (rand1(gl_FragCoord.xy) - 0.5) * u_tweak;
+
+    float mu = iterateFractal(z);
+    float iterNorm = clamp(mu / float(u_maxIter), 0.0, 1.0);
+    float t = pow(iterNorm, 0.7);
+    vec3 col;
+    if(mu >= float(u_maxIter)-0.5){
+        col = vec3(0.02) + 0.2 * pal(t*0.5);
+    } else {
+        col = pal(t + 0.02 * sin(u_time*0.0004 + t*12.0));
+    }
+    // vignette
+    float d = length((gl_FragCoord.xy/u_resolution.xy) - 0.5);
+    col *= 1.0 - smoothstep(0.55, 0.95, d);
+    outColor = vec4(col,1.0);
+}
+</script>
+
+<script id="fs_extract" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+in vec2 v_uv; out vec4 outColor;
+uniform sampler2D u_tex;
+uniform float u_threshold;
+void main(){
+  vec3 c = texture(u_tex, v_uv).rgb;
+  float l = dot(c, vec3(0.299,0.587,0.114));
+  float m = smoothstep(u_threshold, u_threshold+0.2, l);
+  outColor = vec4(c * m, 1.0);
+}
+</script>
+
+<script id="fs_blur" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+in vec2 v_uv; out vec4 outColor;
+uniform sampler2D u_tex;
+uniform vec2 u_texel; // (1/width, 1/height)
+uniform int u_horizontal;
+void main(){
+  vec3 sum = vec3(0.0);
+  // 9-tap gaussian kernel (separable)
+  float w0 = 0.227027;
+  float w1 = 0.1945946;
+  float w2 = 0.1216216;
+  float w3 = 0.054054;
+  float w4 = 0.016216;
+  if(u_horizontal==1){
+    sum += texture(u_tex, v_uv + vec2(0.0,0.0)).rgb * w0;
+    sum += texture(u_tex, v_uv + vec2(u_texel.x*1.0,0.0)).rgb * w1;
+    sum += texture(u_tex, v_uv - vec2(u_texel.x*1.0,0.0)).rgb * w1;
+    sum += texture(u_tex, v_uv + vec2(u_texel.x*2.0,0.0)).rgb * w2;
+    sum += texture(u_tex, v_uv - vec2(u_texel.x*2.0,0.0)).rgb * w2;
+    sum += texture(u_tex, v_uv + vec2(u_texel.x*3.0,0.0)).rgb * w3;
+    sum += texture(u_tex, v_uv - vec2(u_texel.x*3.0,0.0)).rgb * w3;
+    sum += texture(u_tex, v_uv + vec2(u_texel.x*4.0,0.0)).rgb * w4;
+    sum += texture(u_tex, v_uv - vec2(u_texel.x*4.0,0.0)).rgb * w4;
+  } else {
+    sum += texture(u_tex, v_uv + vec2(0.0,0.0)).rgb * w0;
+    sum += texture(u_tex, v_uv + vec2(0.0,u_texel.y*1.0)).rgb * w1;
+    sum += texture(u_tex, v_uv - vec2(0.0,u_texel.y*1.0)).rgb * w1;
+    sum += texture(u_tex, v_uv + vec2(0.0,u_texel.y*2.0)).rgb * w2;
+    sum += texture(u_tex, v_uv - vec2(0.0,u_texel.y*2.0)).rgb * w2;
+    sum += texture(u_tex, v_uv + vec2(0.0,u_texel.y*3.0)).rgb * w3;
+    sum += texture(u_tex, v_uv - vec2(0.0,u_texel.y*3.0)).rgb * w3;
+    sum += texture(u_tex, v_uv + vec2(0.0,u_texel.y*4.0)).rgb * w4;
+    sum += texture(u_tex, v_uv - vec2(0.0,u_texel.y*4.0)).rgb * w4;
+  }
+  outColor = vec4(sum,1.0);
+}
+</script>
+
+<script id="fs_comp" type="x-shader/x-fragment">
+#version 300 es
+precision highp float;
+in vec2 v_uv; out vec4 outColor;
+uniform sampler2D u_base;
+uniform sampler2D u_bloom;
+uniform float u_bloomStrength;
+void main(){
+  vec3 base = texture(u_base, v_uv).rgb;
+  vec3 bloom = texture(u_bloom, v_uv).rgb;
+  vec3 col = base + bloom * u_bloomStrength;
+  // simple tonemap
+  col = col / (col + vec3(1.0));
+  outColor = vec4(col,1.0);
+}
+</script>
+
+<script>
+(async function(){
+  const canvas = document.getElementById('c');
+  const gl = canvas.getContext('webgl2', {preserveDrawingBuffer:false});
+  if(!gl){ alert('WebGL2 required'); return; }
+
+  // create program util
+  function compile(id, type){
+    const src = document.getElementById(id).textContent;
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
+      console.error(gl.getShaderInfoLog(sh)); throw 'compile error';
+    }
+    return sh;
+  }
+  function createProgram(vsId, fsId){
+    const vs = compile(vsId, gl.VERTEX_SHADER);
+    const fs = compile(fsId, gl.FRAGMENT_SHADER);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+    gl.bindAttribLocation(prog, 0, 'a_pos');
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(prog)); throw 'link error'; }
+    return prog;
+  }
+
+  // programs
+  const progFr = createProgram('vs','fs_fractal');
+  const progExtract = createProgram('vs','fs_extract');
+  const progBlur = createProgram('vs','fs_blur');
+  const progComp = createProgram('vs','fs_comp');
+
+  // full screen quad
+  const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+
+  // helper to setup attrib
+  function bindQuad(prog){
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    const loc = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  }
+
+  // create textures and framebuffers helper
+  function createTexture(w,h,filter=gl.LINEAR, internal=gl.RGBA8){
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, internal, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return tex;
+  }
+  function createFBO(tex){
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return f;
+  }
+
+  // resolution targeting (cap 4K)
+  function resize(){
+    const DPR = Math.min(2.0, window.devicePixelRatio || 1);
+    const wCSS = Math.max(320, window.innerWidth);
+    const hCSS = Math.max(240, window.innerHeight);
+    const targetW = Math.min(3840, Math.floor(wCSS * DPR));
+    const targetH = Math.min(2160, Math.floor(hCSS * DPR));
+    canvas.width = targetW; canvas.height = targetH;
+    canvas.style.width = wCSS + 'px'; canvas.style.height = hCSS + 'px';
+    gl.viewport(0,0,targetW,targetH);
+    return {w:targetW,h:targetH};
+  }
+
+  let res = resize();
+  window.addEventListener('resize', ()=> { res = resize(); allocateBuffers(); });
+
+  // allocate render targets sized to canvas (and smaller for blur)
+  let texMain, fboMain, texBright, fboBright, texPing, fboPing, texPong, fboPong;
+  function allocateBuffers(){
+    if(texMain) gl.deleteTexture(texMain);
+    const w = res.w, h = res.h;
+    texMain = createTexture(w,h,gl.LINEAR, gl.RGBA8);
+    fboMain = createFBO(texMain);
+    texBright = createTexture(w/2|0, h/2|0, gl.LINEAR, gl.RGBA8);
+    fboBright = createFBO(texBright);
+    texPing = createTexture(w/2|0, h/2|0, gl.LINEAR, gl.RGBA8);
+    fboPing = createFBO(texPing);
+    texPong = createTexture(w/2|0, h/2|0, gl.LINEAR, gl.RGBA8);
+    fboPong = createFBO(texPong);
+  }
+  allocateBuffers();
+
+  // palette texture (1D) generation
+  function makePalette(seed){
+    const size = 1024;
+    const cvs = document.createElement('canvas'); cvs.width = size; cvs.height = 1;
+    const ctx2 = cvs.getContext('2d');
+    const img = ctx2.createImageData(size,1);
+    function hsvToRgb(h,s,v){
+      let c = v*s, x = c*(1-Math.abs((h/60)%2 -1)), m=v-c;
+      let r=0,g=0,b=0;
+      if(h<60){ r=c; g=x; b=0; } else if(h<120){ r=x; g=c; b=0; } else if(h<180){ r=0; g=c; b=x; }
+      else if(h<240){ r=0; g=x; b=c; } else if(h<300){ r=x; g=0; b=c; } else { r=c; g=0; b=x; }
+      return [Math.round((r+m)*255), Math.round((g+m)*255), Math.round((b+m)*255)];
+    }
+    // seeded random
+    let a = seed|0;
+    function rnd(){ a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ a>>>15, 1 | a); t = (t + Math.imul(t ^ t>>>7, 61 | t) ^ t) >>> 0; return t / 4294967296; }
+    const baseHue = rnd()*360;
+    const bands = 3 + Math.floor(rnd()*4);
+    const anchors = [];
+    for(let i=0;i<bands;i++){
+      anchors.push({pos: i/(bands-1), h: (baseHue + (rnd()*120 - 60))%360, s: 0.6 + rnd()*0.4, v: 0.4 + rnd()*0.6});
+    }
+    for(let i=0;i<size;i++){
+      const t = i/(size-1);
+      let j=1; while(j<anchors.length && anchors[j].pos < t) j++;
+      const a0 = anchors[j-1], b0 = anchors[Math.min(j, anchors.length-1)];
+      const local = (t - a0.pos) / Math.max(1e-6, (b0.pos - a0.pos));
+      let dh = ((b0.h - a0.h + 540) % 360) - 180;
+      let h = (a0.h + dh*local + 360) % 360;
+      let s = a0.s + (b0.s - a0.s)*local;
+      let v = a0.v + (b0.v - a0.v)*local;
+      const rgb = hsvToRgb(h,s,v);
+      img.data[i*4+0] = rgb[0]; img.data[i*4+1]=rgb[1]; img.data[i*4+2]=rgb[2]; img.data[i*4+3]=255;
+    }
+    ctx2.putImageData(img,0,0);
+    return cvs;
+  }
+
+  // upload palette to GPU as 2D (height 1) texture
+  let paletteTex;
+  function uploadPalette(seed){
+    const cvs = makePalette(seed);
+    if(paletteTex) gl.deleteTexture(paletteTex);
+    paletteTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cvs);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  // initial random params
+  let seed = Math.floor(Math.random()*1e9);
+  uploadPalette(seed);
+  let params = {
+    centerX: -0.5 + (Math.random()*2 -1) * 0.6,
+    centerY: (Math.random()*2 -1) * 0.4,
+    scale: 3.5 * Math.pow(1.3, Math.random()*8),
+    maxIter: 512 + Math.floor(Math.random()*512),
+    formula: Math.floor(Math.random()*5), // 0..4
+    power: 2 + Math.random()*4,
+    juliaC: [(Math.random()*2-1)*1.1, (Math.random()*2-1)*1.1],
+    symmetry: 3 + Math.floor(Math.random()*10),
+    mirror: Math.random()>.5?1:0,
+    tweak: 0.0006 + Math.random()*0.003
+  };
+
+  // uniforms locations cache
+  const loc = (p, name) => gl.getUniformLocation(p, name);
+
+  // draw functions
+  function drawFractal(time){
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboMain);
+    gl.viewport(0,0,res.w,res.h);
+    gl.useProgram(progFr);
+    bindQuad(progFr);
+    gl.activeTexture(gl.TEXTURE0); // palette at unit0
+    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+    gl.uniform1i(loc(progFr,'u_palette'), 0);
+    gl.uniform2f(loc(progFr,'u_resolution'), res.w, res.h);
+    gl.uniform1f(loc(progFr,'u_time'), time);
+    gl.uniform2f(loc(progFr,'u_center'), params.centerX, params.centerY);
+    gl.uniform1f(loc(progFr,'u_scale'), params.scale);
+    gl.uniform1i(loc(progFr,'u_maxIter'), params.maxIter);
+    gl.uniform1i(loc(progFr,'u_formula'), params.formula);
+    gl.uniform1f(loc(progFr,'u_power'), params.power);
+    gl.uniform2f(loc(progFr,'u_juliaC'), params.juliaC[0], params.juliaC[1]);
+    gl.uniform1f(loc(progFr,'u_seed'), seed);
+    gl.uniform1f(loc(progFr,'u_symmetry'), params.symmetry);
+    gl.uniform1i(loc(progFr,'u_mirror'), params.mirror);
+    gl.uniform1f(loc(progFr,'u_tweak'), params.tweak);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  function extractBright(){
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboBright);
+    gl.viewport(0,0,res.w/2|0,res.h/2|0);
+    gl.useProgram(progExtract);
+    bindQuad(progExtract);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texMain);
+    gl.uniform1i(loc(progExtract,'u_tex'), 0);
+    gl.uniform1f(loc(progExtract,'u_threshold'), 0.55 + (Math.random()*0.05));
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  function blurPass(){
+    const w = res.w/2|0, h = res.h/2|0;
+    // horizontal blur: ping = blur(texBright)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboPing);
+    gl.viewport(0,0,w,h);
+    gl.useProgram(progBlur);
+    bindQuad(progBlur);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texBright);
+    gl.uniform1i(loc(progBlur,'u_tex'), 0);
+    gl.uniform2f(loc(progBlur,'u_texel'), 1.0/w, 1.0/h);
+    gl.uniform1i(loc(progBlur,'u_horizontal'), 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // vertical blur: pong = blur(ping)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboPong);
+    gl.viewport(0,0,w,h);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texPing);
+    gl.uniform1i(loc(progBlur,'u_tex'), 0);
+    gl.uniform1i(loc(progBlur,'u_horizontal'), 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  function composite(){
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0,0,res.w,res.h);
+    gl.useProgram(progComp);
+    bindQuad(progComp);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texMain); gl.uniform1i(loc(progComp,'u_base'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texPong); gl.uniform1i(loc(progComp,'u_bloom'), 1);
+    gl.uniform1f(loc(progComp,'u_bloomStrength'), 1.6);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // animation & auto-zoom state
+  let start = performance.now();
+  let last = start;
+  let autoZoom = {on:false, dir:1, speed: 0.9975};
+  function tick(t){
+    const now = performance.now();
+    const dt = (now - last) / 1000;
+    last = now;
+    // subtle auto behaviours
+    if(autoZoom.on){
+      params.scale *= autoZoom.dir === 1 ? autoZoom.speed : 1/autoZoom.speed;
+    }
+    // animate slight drift of center for life
+    params.centerX += Math.sin((now+seed)%10000 * 0.0001) * 0.0000015;
+    params.centerY += Math.cos((now+seed*0.7)%12000 * 0.000095) * 0.0000012;
+
+    drawFractal(now - start);
+    extractBright();
+    blurPass();
+    composite();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // interaction: drag to pan, wheel/pinch to zoom, double-tap toggles auto zoom
+  let down = false, lastPos = null;
+  canvas.addEventListener('pointerdown', (e)=>{ down=true; lastPos={x:e.clientX,y:e.clientY}; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', (e)=>{ if(!down) return; const dx=(e.clientX-lastPos.x), dy=(e.clientY-lastPos.y); lastPos={x:e.clientX,y:e.clientY}; // map to fractal world
+    const vw = params.scale;
+    params.centerX -= (dx / canvas.clientWidth) * vw;
+    params.centerY += (dy / canvas.clientHeight) * vw * (canvas.clientHeight/canvas.clientWidth);
+  });
+  window.addEventListener('pointerup', ()=>{ down=false; lastPos=null; });
+
+  // wheel zoom
+  canvas.addEventListener('wheel', (e)=>{ e.preventDefault();
+    const delta = Math.sign(e.deltaY);
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const zoomFactor = Math.pow(1.02, delta * 8.0);
+    const wx = (px - 0.5) * params.scale * (canvas.height/canvas.width) + params.centerX;
+    const wy = (0.5 - py) * params.scale + params.centerY;
+    params.centerX = wx + (params.centerX - wx) * zoomFactor;
+    params.centerY = wy + (params.centerY - wy) * zoomFactor;
+    params.scale *= zoomFactor;
+  }, {passive:false});
+
+  // touch pinch
+  let lastDist = 0;
+  canvas.addEventListener('touchstart', (e)=>{ if(e.touches.length===2){ const a=e.touches[0], b=e.touches[1]; lastDist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); } });
+  canvas.addEventListener('touchmove', (e)=>{ if(e.touches.length===2){ e.preventDefault(); const a=e.touches[0], b=e.touches[1]; const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); if(lastDist>0){ const zoomFactor = lastDist / dist; // zoom around midpoint
+      const cx = (a.clientX + b.clientX)/2, cy = (a.clientY + b.clientY)/2;
+      const rect = canvas.getBoundingClientRect(); const px=(cx-rect.left)/rect.width, py=(cy-rect.top)/rect.height;
+      const wx = (px - 0.5) * params.scale * (canvas.height/canvas.width) + params.centerX;
+      const wy = (0.5 - py) * params.scale + params.centerY;
+      params.centerX = wx + (params.centerX - wx) * zoomFactor;
+      params.centerY = wy + (params.centerY - wy) * zoomFactor;
+      params.scale *= zoomFactor;
+    } lastDist = dist; } }, {passive:false});
+  canvas.addEventListener('touchend', ()=>{ lastDist = 0; });
+
+  // double-tap / double-click toggles auto zoom direction
+  let lastTap = 0;
+  canvas.addEventListener('pointerup', (e)=>{ const now = performance.now(); if(now - lastTap < 350){ autoZoom.on = !autoZoom.on; if(autoZoom.on) autoZoom.dir = Math.random()>0.5?1:-1; } lastTap = now; });
+
+  // responsive initial randomize each load (ensures different mandala)
+  function randomizeAll(){
+    seed = Math.floor(Math.random()*1e9);
+    uploadPalette(seed);
+    params.formula = Math.floor(Math.random()*5);
+    params.power = 2 + Math.random()*4;
+    params.juliaC = [(Math.random()*2-1)*1.1, (Math.random()*2-1)*1.1];
+    params.symmetry = 3 + Math.floor(Math.random()*10);
+    params.mirror = Math.random()>.5?1:0;
+    params.tweak = 0.0006 + Math.random()*0.003;
+    params.maxIter = 256 + Math.floor(Math.random()*768);
+    params.centerX = -0.5 + (Math.random()*2 -1) * 0.7;
+    params.centerY = (Math.random()*2 -1) * 0.6;
+    params.scale = 3.5 * Math.pow(1.3, Math.random()*8);
+  }
+  // give slight re-randomize on key R for debugging (no UI)
+  window.addEventListener('keydown', (e)=>{ if(e.key==='r' || e.key==='R') randomizeAll(); });
+
+  // initial tiny delay then re-allocate buffers to set correct half-size for bloom
+  setTimeout(()=>{ res = resize(); allocateBuffers(); }, 120);
+
+})();
+</script>
+</body>
+</html>
