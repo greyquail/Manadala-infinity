@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>EXPLORING STRANGE MANDELBROT UNIVERSE</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:'Segoe UI', system-ui, sans-serif;}
+  canvas{display:block; width:100vw; height:100vh; touch-action:none; -webkit-tap-highlight-color:transparent;}
+  
+  /* Universe Info Panel */
+  #universe-info {
+    position: fixed;
+    left: 20px;
+    top: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    color: white;
+    max-width: 350px;
+    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  
+  #universe-info h2 {
+    margin: 0 0 10px 0;
+    font-size: 1.4em;
+    color: #4fc3f7;
+    font-weight: 600;
+  }
+  
+  #universe-info h3 {
+    margin: 15px 0 8px 0;
+    font-size: 1em;
+    color: #81c784;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  #universe-info p {
+    margin: 0 0 12px 0;
+    font-size: 0.9em;
+    line-height: 1.4;
+    color: #e0e0e0;
+  }
+  
+  #coordinates {
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 30, 60, 0.5);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    margin-bottom: 12px;
+  }
+  
+  #universe-properties {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  #universe-properties li {
+    margin: 6px 0;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+  }
+  
+  .property-label {
+    color: #bb86fc;
+    min-width: 120px;
+    display: inline-block;
+  }
+  
+  .property-value {
+    color: #ffffff;
+    font-weight: 500;
+  }
+  
+  /* Controls */
+  #controls {
+    position: fixed;
+    right: 20px;
+    top: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 1000;
+  }
+  
+  .control-btn {
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.2em;
+  }
+  
+  .control-btn:hover {
+    background: rgba(79, 195, 247, 0.2);
+    border-color: #4fc3f7;
+    transform: scale(1.1);
+  }
+  
+  /* Discovery Counter */
+  #discovery-counter {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 15px 20px;
+    color: white;
+    z-index: 1000;
+    text-align: center;
+  }
+  
+  #discovery-count {
+    font-size: 2em;
+    font-weight: bold;
+    color: #4fc3f7;
+    display: block;
+  }
+  
+  .discovery-label {
+    font-size: 0.8em;
+    color: #81c784;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  /* Exploration Mode */
+  .mode-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid #4fc3f7;
+    border-radius: 12px;
+    padding: 10px 15px;
+    color: #4fc3f7;
+    font-size: 0.9em;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .pulse {
+    width: 10px;
+    height: 10px;
+    background: #4fc3f7;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+  
+  /* Error box */
+  #err{
+    position:fixed;left:8px;top:8px;background:#111a;padding:8px 10px;border-radius:6px;color:#fff;font-family:system-ui;opacity:0.9;display:none;z-index:9999
+  }
+  
+  /* Loading screen */
+  #loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    color: white;
+  }
+  
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 3px solid transparent;
+    border-top-color: #4fc3f7;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    #universe-info {
+      left: 10px;
+      right: 10px;
+      top: 10px;
+      max-width: none;
+      padding: 15px;
+    }
+    
+    #controls {
+      right: 10px;
+      top: 10px;
+    }
+    
+    .control-btn {
+      width: 45px;
+      height: 45px;
+    }
+    
+    #discovery-counter {
+      bottom: 10px;
+      right: 10px;
+    }
+    
+    .mode-indicator {
+      bottom: 10px;
+      left: 10px;
+    }
+  }
+</style>
+</head>
+<body>
+<!-- Loading Screen -->
+<div id="loading">
+  <div class="loading-spinner"></div>
+  <h2>INITIALIZING UNIVERSE EXPLORER</h2>
+  <p>Loading quantum fractal engine...</p>
+</div>
+
+<!-- Universe Info Panel -->
+<div id="universe-info">
+  <h2 id="universe-name">STRANGE MANDELBROT UNIVERSE</h2>
+  <p id="universe-description">This fractal pulses with infinite possibilities. Navigate through multidimensional space to discover new patterns.</p>
+  
+  <div id="coordinates">
+    <div>X: <span id="coord-x">0.000000</span></div>
+    <div>Y: <span id="coord-y">0.000000</span></div>
+    <div>Zoom: 10<sup id="zoom-level">0</sup></div>
+  </div>
+  
+  <h3>UNIVERSE PROPERTIES</h3>
+  <ul id="universe-properties">
+    <li><span class="property-label">DIMENSIONS:</span> <span class="property-value" id="prop-dimensions">∞</span></li>
+    <li><span class="property-label">ENTROPY:</span> <span class="property-value" id="prop-entropy">8.92</span></li>
+    <li><span class="property-label">SYMMETRY:</span> <span class="property-value" id="prop-symmetry">7</span></li>
+    <li><span class="property-label">CHAOS LEVEL:</span> <span class="property-value" id="prop-chaos">0.42</span></li>
+    <li><span class="property-label">ITERATIONS:</span> <span class="property-value" id="prop-iterations">512</span></li>
+  </ul>
+  
+  <h3>EXPLORATION TIPS</h3>
+  <p>• Drag to navigate through dimensions<br>
+  • Scroll to zoom into quantum foam<br>
+  • Double-tap to toggle auto-exploration<br>
+  • Tap randomize to discover new universes</p>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="control-btn" id="randomize-btn" title="Discover New Universe">🌀</div>
+  <div class="control-btn" id="auto-btn" title="Auto-Explore">▶️</div>
+  <div class="control-btn" id="capture-btn" title="Capture Discovery">📸</div>
+</div>
+
+<!-- Discovery Counter -->
+<div id="discovery-counter">
+  <span id="discovery-count">1</span>
+  <span class="discovery-label">UNIVERSES DISCOVERED</span>
+</div>
+
+<!-- Mode Indicator -->
+<div class="mode-indicator">
+  <div class="pulse"></div>
+  <span id="mode-text">EXPLORATION MODE</span>
+</div>
+
+<!-- Error Box -->
+<div id="err">WebGL unavailable — using fallback.</div>
+
+<!-- Main Canvas -->
+<canvas id="c"></canvas>
+
+<script>
+/* ---------- UNIVERSE EXPLORER - Strange Mandelbrot Visualization ---------- */
+
+const canvas = document.getElementById('c');
+const errBox = document.getElementById('err');
+const loadingScreen = document.getElementById('loading');
+const universeName = document.getElementById('universe-name');
+const universeDesc = document.getElementById('universe-description');
+const coordX = document.getElementById('coord-x');
+const coordY = document.getElementById('coord-y');
+const zoomLevel = document.getElementById('zoom-level');
+const propDimensions = document.getElementById('prop-dimensions');
+const propEntropy = document.getElementById('prop-entropy');
+const propSymmetry = document.getElementById('prop-symmetry');
+const propChaos = document.getElementById('prop-chaos');
+const propIterations = document.getElementById('prop-iterations');
+const discoveryCount = document.getElementById('discovery-count');
+const modeText = document.getElementById('mode-text');
+
+let discoveryCounter = 1;
+let autoExploreMode = false;
+let universeNames = [
+  "QUANTUM MANDELBROT FIELD",
+  "CHAOTIC JULIA SPHERE",
+  "SYMMETRY CRYSTAL UNIVERSE",
+  "INFINITE FRACTAL DIMENSION",
+  "HYPERBOLIC MANDALA SPACE",
+  "PSYCHEDELIC BURNING SHIP",
+  "MULTI-DIMENSIONAL PATTERN",
+  "NEBULA FRACTAL CLOUD",
+  "COSMIC LATTICE STRUCTURE",
+  "QUANTUM FOAM UNIVERSE"
+];
+
+let universeDescriptions = [
+  "This universe exhibits quantum entanglement patterns at all scales.",
+  "A chaotic sphere of infinite complexity, defying conventional geometry.",
+  "Perfect crystalline symmetry emerges from apparent mathematical chaos.",
+  "Infinite recursion creates patterns within patterns, ad infinitum.",
+  "Hyperbolic geometry distorts reality in this non-Euclidean space.",
+  "The burning ship formula reveals strange attractors in this dimension.",
+  "Multiple dimensions fold into each other creating impossible shapes.",
+  "Fractal clouds form nebula-like structures across the quantum field.",
+  "Cosmic lattices connect all points in this interconnected reality.",
+  "Quantum foam bubbles create and destroy universes constantly."
+];
+
+function logErr(msg){
+  console.warn(msg);
+  errBox.style.display = 'block';
+  errBox.textContent = msg;
+  setTimeout(()=> errBox.style.display = 'none', 3500);
+}
+
+// Try to get WebGL context
+function getWebGLContext() {
+  const contextAttributes = {
+    alpha: false,
+    antialias: true,
+    depth: false,
+    failIfMajorPerformanceCaveat: false,
+    preserveDrawingBuffer: false,
+    stencil: false
+  };
+  
+  let gl = canvas.getContext('webgl2', contextAttributes);
+  if (gl) {
+    console.log('Using WebGL2');
+    return {gl, isWebGL2: true};
+  }
+  
+  gl = canvas.getContext('webgl', contextAttributes) || 
+       canvas.getContext('experimental-webgl', contextAttributes);
+  if (gl) {
+    console.log('Using WebGL1');
+    return {gl, isWebGL2: false};
+  }
+  
+  return null;
+}
+
+// Update UI with universe properties
+function updateUniverseInfo(params, zoom) {
+  // Update coordinates
+  coordX.textContent = params.centerX.toFixed(6);
+  coordY.textContent = params.centerY.toFixed(6);
+  zoomLevel.textContent = Math.floor(Math.log10(1/params.scale));
+  
+  // Update properties
+  propSymmetry.textContent = params.symmetry;
+  propIterations.textContent = params.maxIter;
+  
+  // Calculate pseudo-properties based on parameters
+  const entropy = (Math.sin(params.centerX * 100) + Math.cos(params.centerY * 100) + 2) * 3;
+  propEntropy.textContent = entropy.toFixed(2);
+  
+  const chaos = (params.tweak * 100 + Math.abs(params.juliaC[0]) + Math.abs(params.juliaC[1])) / 3;
+  propChaos.textContent = chaos.toFixed(2);
+}
+
+// Randomize universe name and description
+function randomizeUniverseInfo() {
+  const nameIndex = Math.floor(Math.random() * universeNames.length);
+  const descIndex = Math.floor(Math.random() * universeDescriptions.length);
+  
+  universeName.textContent = universeNames[nameIndex];
+  universeDesc.textContent = universeDescriptions[descIndex];
+  
+  // Increment discovery counter
+  discoveryCounter++;
+  discoveryCount.textContent = discoveryCounter;
+}
+
+// Initialize
+const glContext = getWebGLContext();
+if (!glContext) {
+  logErr('No WebGL — using CPU explorer');
+  startCPU();
+} else {
+  startGL(glContext.gl, glContext.isWebGL2);
+}
+
+/* ---------- CPU FALLBACK ---------- */
+function startCPU(){
+  hideLoading();
+  const ctx = canvas.getContext('2d');
+  
+  function resize(){
+    canvas.width = Math.max(320, window.innerWidth);
+    canvas.height = Math.max(240, window.innerHeight);
+  }
+  
+  window.addEventListener('resize', resize);
+  resize();
+  
+  let seed = Math.floor(Math.random()*1e9);
+  
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.createImageData(w,h);
+    let idx=0;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        let nx = (x/w - 0.5) * 3;
+        let ny = (y/h - 0.5) * 2;
+        let a=0,b=0, ca=nx*1.1, cb=ny*1.1;
+        let n=0;
+        for(;n<80;n++){
+          let aa = a*a - b*b + ca;
+          let bb = 2*a*b + cb;
+          a = aa; b = bb;
+          if(a*a + b*b > 16) break;
+        }
+        const shade = n < 80 ? (n/80) : 0;
+        const hue = (shade*360 + seed%360) % 360;
+        const c = hsvToRgb(hue, 0.75, 0.5 + 0.5*shade);
+        img.data[idx++] = c[0]; img.data[idx++] = c[1]; img.data[idx++] = c[2]; img.data[idx++] = 255;
+      }
+    }
+    ctx.putImageData(img,0,0);
+    requestAnimationFrame(draw);
+  }
+  
+  function hsvToRgb(h,s,v){
+    h = (h%360+360)%360; s=Math.max(0,Math.min(1,s)); v=Math.max(0,Math.min(1,v));
+    const c = v*s; const x = c*(1-Math.abs((h/60)%2-1)); const m = v-c;
+    let r=0,g=0,b=0;
+    if(h<60){ r=c; g=x; b=0; } else if(h<120){ r=x; g=c; b=0; } else if(h<180){ r=0; g=c; b=x; }
+    else if(h<240){ r=0; g=x; b=c; } else if(h<300){ r=x; g=0; b=c; } else { r=c; g=0; b=x; }
+    return [Math.round((r+m)*255), Math.round((g+m)*255), Math.round((b+m)*255)];
+  }
+  
+  // Initialize with random universe info
+  randomizeUniverseInfo();
+  draw();
+}
+
+/* ---------- WEBGL MAIN RENDERER ---------- */
+function startGL(gl, isWebGL2){
+  // Compile shaders
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+      const info = gl.getShaderInfoLog(s);
+      console.error('Shader compile error:', info);
+      throw info;
+    }
+    return s;
+  }
+  
+  function link(vs, fs){
+    const p = gl.createProgram();
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.bindAttribLocation(p, 0, 'a_pos');
+    gl.linkProgram(p);
+    if(!gl.getProgramParameter(p, gl.LINK_STATUS)){
+      const info = gl.getProgramInfoLog(p);
+      console.error('Program link error:', info);
+      throw info;
+    }
+    return p;
+  }
+
+  // Vertex shader
+  const vsSrc = `attribute vec2 a_pos; void main(){ gl_Position = vec4(a_pos,0.0,1.0); }`;
+
+  // Fragment shader
+  const fsSrc = `
+    precision mediump float;
+    uniform vec2 u_resolution;
+    uniform float u_time;
+    uniform vec2 u_center;
+    uniform float u_scale;
+    uniform int u_maxIter;
+    uniform int u_formula;
+    uniform float u_power;
+    uniform vec2 u_juliaC;
+    uniform float u_seed;
+    uniform float u_symmetry;
+    uniform int u_mirror;
+    uniform sampler2D u_palette;
+    uniform float u_tweak;
+    
+    float rand1(vec2 co){
+      return fract(sin(dot(co, vec2(12.9898,78.233))) * 43758.5453 + u_seed*0.0001);
+    }
+    
+    vec3 pal(float t){
+      return texture2D(u_palette, vec2(fract(t),0.5)).rgb;
+    }
+    
+    vec2 cpow(vec2 z, float p){
+      float r = length(z);
+      float th = atan(z.y,z.x);
+      float rp = pow(r,p);
+      return vec2(rp*cos(th*p), rp*sin(th*p));
+    }
+    
+    vec2 apply_sym(vec2 z, float slices, int mirror){
+      if(slices <= 1.5) return z;
+      float theta = atan(z.y, z.x);
+      float r = length(z);
+      float slice = 6.28318530718 / slices;
+      theta = mod(theta + 1e-6, slice);
+      if(mirror==1 && theta > slice*0.5) theta = slice - theta;
+      return vec2(r*cos(theta), r*sin(theta));
+    }
+    
+    float iterateFractal(vec2 c){
+      int maxI = u_maxIter;
+      vec2 z = vec2(0.0);
+      float mu = float(maxI);
+      
+      if(u_formula==3){
+        z = c;
+        for(int i=0;i<4096;i++){
+          if(i>=maxI) break;
+          if(u_power==2.0){
+            z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + u_juliaC;
+          } else {
+            z = cpow(z,u_power) + u_juliaC;
+          }
+          float r2 = dot(z,z);
+          if(r2>256.0){
+            float r=sqrt(r2);
+            mu = float(i)+1.0 - log(log(r))/log(max(u_power,2.0));
+            break;
+          }
+        }
+      }
+      else if(u_formula==2){
+        z = vec2(0.0);
+        for(int i=0;i<4096;i++){
+          if(i>=maxI) break;
+          z = vec2(abs(z.x), abs(z.y));
+          vec2 z2 = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+          z = z2;
+          float r2=dot(z,z);
+          if(r2>256.0){
+            float r=sqrt(r2);
+            mu=float(i)+1.0 - log(log(r))/log(2.0);
+            break;
+          }
+        }
+      }
+      else {
+        z = vec2(0.0);
+        for(int i=0;i<4096;i++){
+          if(i>=maxI) break;
+          if(u_power==2.0){
+            z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+          } else {
+            z = cpow(z,u_power) + c;
+          }
+          float r2 = dot(z,z);
+          if(r2>256.0){
+            float r=sqrt(r2);
+            mu=float(i)+1.0 - log(log(r))/log(max(u_power,2.0));
+            break;
+          }
+        }
+      }
+      return mu;
+    }
+    
+    void main(){
+      vec2 uv = (gl_FragCoord.xy - 0.5*u_resolution)/u_resolution.y;
+      vec2 z = uv * u_scale + u_center;
+      
+      z = apply_sym(z, u_symmetry, u_mirror);
+      z += (rand1(gl_FragCoord.xy) - 0.5) * u_tweak;
+      
+      float mu = iterateFractal(z);
+      float iterNorm = clamp(mu/float(u_maxIter), 0.0, 1.0);
+      float t = pow(iterNorm, 0.7);
+      
+      vec3 col;
+      if(mu >= float(u_maxIter) - 0.5){
+        col = vec3(0.02) + 0.2*pal(t*0.5);
+      } else {
+        col = pal(t + 0.02*sin(u_time*0.0004 + t*12.0));
+      }
+      
+      // Add pulsing effect
+      col *= 0.9 + 0.1*sin(u_time*0.001);
+      
+      // Vignette
+      vec2 uvNorm = gl_FragCoord.xy / u_resolution;
+      float d = distance(uvNorm, vec2(0.5));
+      col *= 1.0 - smoothstep(0.55, 0.95, d);
+      
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  // Compile and link
+  const vert = compile(gl.VERTEX_SHADER, vsSrc);
+  const frag = compile(gl.FRAGMENT_SHADER, fsSrc);
+  const prog = link(vert, frag);
+
+  // Quad setup
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+
+  function setAttribs(){
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    const loc = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  }
+
+  // Resize
+  function resize(){
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    const wCSS = Math.max(320, window.innerWidth);
+    const hCSS = Math.max(240, window.innerHeight);
+    const targetW = Math.min(3840, Math.max(2, Math.floor(wCSS * DPR)));
+    const targetH = Math.min(2160, Math.max(2, Math.floor(hCSS * DPR)));
+    canvas.width = targetW;
+    canvas.height = targetH;
+    canvas.style.width = wCSS + 'px';
+    canvas.style.height = hCSS + 'px';
+    gl.viewport(0,0,targetW,targetH);
+    return {w: targetW, h: targetH};
+  }
+
+  let res = resize();
+  window.addEventListener('resize', ()=> { res = resize(); });
+
+  // Palette generation
+  function makePaletteCanvas(seed){
+    const size = 256;
+    const cvs = document.createElement('canvas');
+    cvs.width = size;
+    cvs.height = 1;
+    const ctx2 = cvs.getContext('2d');
+    const img = ctx2.createImageData(size,1);
+    
+    let a = seed|0;
+    function rnd(){
+      a = (a + 0x6D2B79F5)|0;
+      let t = Math.imul(a ^ a>>>15, 1 | a);
+      t = (t + Math.imul(t ^ t>>>7, 61 | t) ^ t) >>> 0;
+      return t/4294967296;
+    }
+    
+    const baseHue = rnd()*360;
+    const bands = 3 + Math.floor(rnd()*4);
+    const anchors = [];
+    for(let i=0;i<bands;i++){
+      anchors.push({
+        pos: i/(bands-1),
+        h: (baseHue + (rnd()*120 - 60)) % 360,
+        s: 0.6+rnd()*0.4,
+        v: 0.4+rnd()*0.6
+      });
+    }
+    
+    for(let i=0;i<size;i++){
+      const t = i/(size-1);
+      let j=1;
+      while(j<anchors.length && anchors[j].pos < t) j++;
+      const a0 = anchors[j-1];
+      const b0 = anchors[Math.min(j, anchors.length-1)];
+      const local = (t - a0.pos) / Math.max(1e-6, (b0.pos - a0.pos));
+      
+      let dh = ((b0.h - a0.h + 540) % 360) - 180;
+      let h = (a0.h + dh*local + 360) % 360;
+      let s = a0.s + (b0.s - a0.s)*local;
+      let v = a0.v + (b0.v - a0.v)*local;
+      
+      let c = hsvToRgb(h,s,v);
+      img.data[i*4+0] = c[0];
+      img.data[i*4+1] = c[1];
+      img.data[i*4+2] = c[2];
+      img.data[i*4+3] = 255;
+    }
+    ctx2.putImageData(img,0,0);
+    return cvs;
+  }
+  
+  function hsvToRgb(h,s,v){
+    h=(h%360+360)%360;
+    s=Math.max(0,Math.min(1,s));
+    v=Math.max(0,Math.min(1,v));
+    const c=v*s;
+    const x=c*(1-Math.abs((h/60)%2 - 1));
+    const m=v-c;
+    let r=0,g=0,b=0;
+    if(h<60){ r=c; g=x; b=0; }
+    else if(h<120){ r=x; g=c; b=0; }
+    else if(h<180){ r=0; g=c; b=x; }
+    else if(h<240){ r=0; g=x; b=c; }
+    else if(h<300){ r=x; g=0; b=c; }
+    else { r=c; g=0; b=x; }
+    return [Math.round((r+m)*255), Math.round((g+m)*255), Math.round((b+m)*255)];
+  }
+
+  // Palette texture
+  let paletteTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  
+  function uploadPalette(seed){
+    const cvs = makePaletteCanvas(seed);
+    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cvs);
+  }
+
+  // Default parameters
+  let seed = Math.floor(Math.random()*1e9);
+  uploadPalette(seed);
+  
+  let params = {
+    centerX: -0.5 + (Math.random()*2 -1) * 0.6,
+    centerY: (Math.random()*2 -1) * 0.4,
+    scale: 3.5 * Math.pow(1.3, Math.random()*8),
+    maxIter: 400 + Math.floor(Math.random()*600),
+    formula: Math.floor(Math.random()*4),
+    power: 2 + Math.random()*4,
+    juliaC: [(Math.random()*2-1)*1.1, (Math.random()*2-1)*1.1],
+    symmetry: 3 + Math.floor(Math.random()*10),
+    mirror: Math.random()>.5?1:0,
+    tweak: 0.0006 + Math.random()*0.003
+  };
+
+  // Uniform locations
+  let uniformLocations = {};
+  function getUniformLocation(name){
+    if(!uniformLocations[name]){
+      uniformLocations[name] = gl.getUniformLocation(prog, name);
+    }
+    return uniformLocations[name];
+  }
+
+  function setUniforms(time){
+    gl.useProgram(prog);
+    gl.uniform2f(getUniformLocation('u_resolution'), res.w, res.h);
+    gl.uniform1f(getUniformLocation('u_time'), time);
+    gl.uniform2f(getUniformLocation('u_center'), params.centerX, params.centerY);
+    gl.uniform1f(getUniformLocation('u_scale'), params.scale);
+    gl.uniform1i(getUniformLocation('u_maxIter'), params.maxIter);
+    gl.uniform1i(getUniformLocation('u_formula'), params.formula);
+    gl.uniform1f(getUniformLocation('u_power'), params.power);
+    gl.uniform2f(getUniformLocation('u_juliaC'), params.juliaC[0], params.juliaC[1]);
+    gl.uniform1f(getUniformLocation('u_seed'), seed);
+    gl.uniform1f(getUniformLocation('u_symmetry'), params.symmetry);
+    gl.uniform1i(getUniformLocation('u_mirror'), params.mirror);
+    gl.uniform1f(getUniformLocation('u_tweak'), params.tweak);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+    gl.uniform1i(getUniformLocation('u_palette'), 0);
+  }
+
+  // Hide loading screen
+  function hideLoading() {
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => {
+      loadingScreen.style.display = 'none';
+    }, 300);
+  }
+
+  // Initialize UI
+  hideLoading();
+  randomizeUniverseInfo();
+  updateUniverseInfo(params, params.scale);
+  
+  // Setup event listeners for controls
+  document.getElementById('randomize-btn').addEventListener('click', randomizeAll);
+  document.getElementById('auto-btn').addEventListener('click', toggleAutoExplore);
+  document.getElementById('capture-btn').addEventListener('click', captureUniverse);
+  
+  function randomizeAll(){
+    seed = Math.floor(Math.random()*1e9);
+    uploadPalette(seed);
+    params.formula = Math.floor(Math.random()*4);
+    params.power = 2 + Math.random()*4;
+    params.juliaC = [(Math.random()*2-1)*1.1, (Math.random()*2-1)*1.1];
+    params.symmetry = 3 + Math.floor(Math.random()*10);
+    params.mirror = Math.random()>.5?1:0;
+    params.tweak = 0.0006 + Math.random()*0.003;
+    params.maxIter = 200 + Math.floor(Math.random()*800);
+    params.centerX = -0.5 + (Math.random()*2 -1) * 0.7;
+    params.centerY = (Math.random()*2 -1) * 0.6;
+    params.scale = 3.5 * Math.pow(1.3, Math.random()*8);
+    
+    randomizeUniverseInfo();
+    updateUniverseInfo(params, params.scale);
+    
+    // Visual feedback
+    canvas.style.filter = 'brightness(1.5)';
+    setTimeout(() => {
+      canvas.style.filter = 'brightness(1)';
+    }, 200);
+  }
+  
+  function toggleAutoExplore() {
+    autoExploreMode = !autoExploreMode;
+    modeText.textContent = autoExploreMode ? 'AUTO-EXPLORATION MODE' : 'EXPLORATION MODE';
+    
+    // Visual feedback
+    const autoBtn = document.getElementById('auto-btn');
+    if (autoExploreMode) {
+      autoBtn.innerHTML = '⏸️';
+      autoBtn.style.background = 'rgba(79, 195, 247, 0.3)';
+      autoBtn.style.borderColor = '#4fc3f7';
+    } else {
+      autoBtn.innerHTML = '▶️';
+      autoBtn.style.background = 'rgba(0, 0, 0, 0.85)';
+      autoBtn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+    }
+  }
+  
+  function captureUniverse() {
+    try {
+      const dataURL = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `universe-discovery-${Date.now()}.png`;
+      link.href = dataURL;
+      link.click();
+      
+      // Visual feedback
+      const captureBtn = document.getElementById('capture-btn');
+      captureBtn.innerHTML = '✅';
+      setTimeout(() => {
+        captureBtn.innerHTML = '📸';
+      }, 1000);
+    } catch (e) {
+      console.error('Failed to capture:', e);
+    }
+  }
+
+  // Interaction handlers
+  let down = false, lastPos = null;
+  canvas.addEventListener('pointerdown', e => {
+    down = true;
+    lastPos = {x: e.clientX, y: e.clientY};
+    canvas.setPointerCapture(e.pointerId);
+  });
+  
+  canvas.addEventListener('pointermove', e => {
+    if (!down || !lastPos) return;
+    const dx = e.clientX - lastPos.x;
+    const dy = e.clientY - lastPos.y;
+    lastPos = {x: e.clientX, y: e.clientY};
+    const vw = params.scale;
+    params.centerX -= (dx / canvas.clientWidth) * vw;
+    params.centerY += (dy / canvas.clientHeight) * vw * (canvas.clientHeight / canvas.clientWidth);
+    
+    updateUniverseInfo(params, params.scale);
+  });
+  
+  window.addEventListener('pointerup', () => {
+    down = false;
+    lastPos = null;
+  });
+
+  // Zoom
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = Math.sign(e.deltaY);
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const zoomFactor = Math.pow(1.02, delta * 8.0);
+    const wx = (px - 0.5) * params.scale * (canvas.height / canvas.width) + params.centerX;
+    const wy = (0.5 - py) * params.scale + params.centerY;
+    params.centerX = wx + (params.centerX - wx) * zoomFactor;
+    params.centerY = wy + (params.centerY - wy) * zoomFactor;
+    params.scale *= zoomFactor;
+    
+    updateUniverseInfo(params, params.scale);
+  }, {passive: false});
+
+  // Double-tap for auto-explore
+  let lastTap = 0;
+  canvas.addEventListener('pointerup', (e) => {
+    const now = performance.now();
+    if (now - lastTap < 360) {
+      toggleAutoExplore();
+    }
+    lastTap = now;
+  });
+
+  // Main render loop
+  function frame(t) {
+    try {
+      setUniforms(t);
+      setAttribs();
+      
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      
+      // Auto-exploration movement
+      if (autoExploreMode) {
+        params.centerX += Math.sin(t * 0.0001) * 0.0003;
+        params.centerY += Math.cos(t * 0.00007) * 0.0002;
+        params.scale *= 0.9997;
+        
+        // Occasionally change direction
+        if (Math.sin(t * 0.00005) > 0.99) {
+          params.juliaC[0] += (Math.random() - 0.5) * 0.1;
+          params.juliaC[1] += (Math.random() - 0.5) * 0.1;
+        }
+        
+        updateUniverseInfo(params, params.scale);
+      }
+      
+      requestAnimationFrame(frame);
+    } catch(err) {
+      console.error('GL render error', err);
+      logErr('Render error — switching to CPU explorer');
+      startCPU();
+      return;
+    }
+  }
+
+  // Start rendering
+  try {
+    requestAnimationFrame(frame);
+  } catch(e) {
+    console.error('Initial GL setup failed', e);
+    logErr('WebGL error — falling back to CPU');
+    startCPU();
+  }
+}
+</script>
+</body>
+</html>
